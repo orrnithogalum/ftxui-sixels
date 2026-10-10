@@ -10,6 +10,10 @@ modules.
 
 It provides a @ref ftxui::Screen.
 
+It also provides what is needed to draw pictures: `ftxui::Bitmap`,
+`ftxui::EncodeSixel` and `ftxui::Screen::DrawGraphic`. See
+[Images](images.html#image-lower-level).
+
 ---
 
 # ftxui::Screen

@@ -157,6 +157,9 @@ struct FTXUI_EXPORT(DOM) ImageOptions {
   bool async = true;
 
   // --- Chaining ---
+  // One method per option above, named after it, setting it and returning the
+  // options. A few set several at once: Align, Center, Margin, Size, MinSize,
+  // MaxSize and Flex.
   // clang-format off
   ImageOptions& Fit(ImageFit v) { fit = v; return *this; }
   ImageOptions& MaxScale(float v) { max_scale = v; return *this; }
@@ -270,6 +273,10 @@ FTXUI_EXPORT(DOM) void SetMaxConcurrentImageLoads(int max_concurrent);
 /// ImageOptions::ImageView().
 /// @ingroup dom
 FTXUI_EXPORT(DOM) Element image_view(std::string_view url);
+
+/// @brief Display an image, with the given options instead of
+/// ImageOptions::ImageView(). Same as ftxui::image.
+/// @ingroup dom
 FTXUI_EXPORT(DOM)
 Element image_view(std::string_view url, ImageOptions options);
 

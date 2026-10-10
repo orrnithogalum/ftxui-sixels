@@ -85,8 +85,22 @@ cmake --build build --target ftxui_example_image_view
 ./build/examples/component/ftxui_example_image_view [your pictures...]
 ```
 
-Read [doc/image.md](doc/image.md) for the options, the terminals, and how to
-migrate from ftxui-image-view.
+Documentation of what this fork adds:
+
+| Document | Content |
+|----------|---------|
+| [doc/image.md](doc/image.md) | **Using images**: the element, every option, the terminals supported and how to override their detection, loading, migrating from ftxui-image-view, the lower level API, the limitations. |
+| [doc/image-internals.md](doc/image-internals.md) | **How the code works**: every file added or modified, the life of a frame, the sixel encoder, the graphics of a screen, the layout, the caches, the threads, the escape sequences, the tests, the build systems, how to extend it and how to keep up with FTXUI. |
+| [examples/component/image_view.cpp](examples/component/image_view.cpp) | The interactive demo. |
+| [examples/dom/image.cpp](examples/dom/image.cpp) | Printing images without an `App`. |
+| [CHANGELOG.md](CHANGELOG.md) | The list of additions, under "Images (this fork)". |
+
+Every public declaration is also documented in its header:
+[image.hpp](include/ftxui/dom/image.hpp),
+[bitmap.hpp](include/ftxui/screen/bitmap.hpp),
+[sixel.hpp](include/ftxui/screen/sixel.hpp),
+[screen.hpp](include/ftxui/screen/screen.hpp),
+[terminal.hpp](include/ftxui/screen/terminal.hpp).
 
 ## Feature
  * Functional style. Inspired by

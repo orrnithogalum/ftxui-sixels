@@ -63,7 +63,11 @@ class FTXUI_EXPORT(SCREEN) Bitmap {
                                size_t size,
                                std::string* error = nullptr);
 
+  /// @brief Whether there is no pixel: a default constructed bitmap, or the
+  /// result of a failure.
   bool empty() const;
+
+  /// @brief The size, in pixels. Zero when empty().
   int width() const;
   int height() const;
 

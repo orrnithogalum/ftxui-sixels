@@ -239,7 +239,71 @@ grows with it.
 To get the behavior of `image`, growing and centered, pass options:
 `image_view(url, ImageOptions())`.
 
+# Drawing pixels yourself {#image-lower-level}
+
+The element is built on a few classes of `ftxui/screen`, which can be used
+directly.
+
+**ftxui::Bitmap**, in `ftxui/screen/bitmap.hpp`: a grid of RGBA pixels.
+Copying one is cheap, the pixels are shared.
+
+```cpp
+Bitmap a = Bitmap::Load("picture.png");           // Empty on failure.
+Bitmap b = Bitmap::FromRGBA(width, height, rgba);  // 4 bytes per pixel.
+Bitmap c = Bitmap::FromRGB(width, height, rgb);    // 3 bytes per pixel.
+Bitmap d = a.Resized(320, 200);                    // Down or up.
+Bitmap e = a.Resized(320, 200, BitmapFilter::Nearest);
+Bitmap f = a.Resampled(10, 10, 100, 50, 320, 160); // A part of it, scaled.
+
+a.width(); a.height(); a.data(); a.empty(); a.opaque();
+
+// To modify the pixels. Everything cached about the previous content is
+// dropped: this is how to animate a picture.
+uint8_t* pixels = a.MutableData();
+```
+
+**ftxui::EncodeSixel**, in `ftxui/screen/sixel.hpp`: turn a bitmap into the
+escape sequence drawing it at the cursor.
+
+```cpp
+std::cout << EncodeSixel(bitmap);
+std::cout << EncodeSixel(bitmap, /*colors=*/16, SixelDither::None);
+```
+
+`ftxui::SixelImage` gives more control: a canvas larger than the bitmap, an
+offset, a background, a mask. `ftxui::SixelPalette` is the set of colors.
+
+**ftxui::Screen::DrawGraphic**, in `ftxui/screen/screen.hpp`: display a bitmap
+over a rectangle of cells of a screen. This is what a custom `Node` would call
+from its `Render` method.
+
+```cpp
+const Dimensions cell = Terminal::CellPixelSize();
+
+Screen::Graphic graphic;
+graphic.x = 2;                    // The top-left cell.
+graphic.y = 1;
+graphic.width = 20;               // In cells.
+graphic.height = 10;
+graphic.cell_width = cell.dimx;   // In pixels.
+graphic.cell_height = cell.dimy;
+graphic.bitmap = bitmap.Resized(20 * cell.dimx, 10 * cell.dimy);
+screen.DrawGraphic(graphic);
+
+screen.Print();  // The text, then the graphics.
+```
+
+The bitmap is not scaled by the screen. `offset_x` and `offset_y` place it
+inside its cells, at the pixel.
+
+For a screen printed again and again at the same place, as `App` does,
+`Screen::ToStringIncremental` doesn't send again the graphics the terminal is
+already displaying. Call `Screen::ResetGraphics` when what was printed might be
+gone.
+
 # How it works {#image-how}
+
+This is a summary. The code is documented in @subpage images-internals.
 
 - A graphic is attached to the cells it covers. Whatever is drawn over those
   cells afterward, a dialog for instance, cuts a hole in it. The borders of a
