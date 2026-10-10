@@ -74,6 +74,7 @@ out/
 # include directory:
 !include/ftxui/**/*.hpp
 !include/ftxui/**/*.cpp
+!include/image_view.hpp
 
 # src directory:
 !src/ftxui/*.cppm
@@ -81,6 +82,7 @@ out/
 !src/ftxui/**/*.ipp
 !src/ftxui/**/*.cpp
 !src/ftxui/**/*.cppm
+!src/ftxui/screen/stb_image.h
 
 # subprojects directory (meson wraps only, not downloaded sources):
 /subprojects/*
