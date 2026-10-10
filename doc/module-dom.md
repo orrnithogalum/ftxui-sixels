@@ -237,6 +237,20 @@ See:
 Element graph(GraphFunction);
 ```
 
+# image {#dom-image}
+
+Display a picture, from a file, a URL, or a ftxui::Bitmap. It is drawn with
+pixels in the terminals supporting sixel, and with unicode half blocks in the
+others.
+
+@code {cpp}
+image("picture.png") | border
+image("picture.png", ImageOptions().Fit(ImageFit::Cover).Margin(1))
+@endcode
+
+An image scales to the box it is given, up or down, and follows the layout when
+it changes. See the dedicated page: @subpage images.
+
 # Colors {#dom-colors}
 
 Most terminal consoles can display colored text and colored backgrounds. FTXUI

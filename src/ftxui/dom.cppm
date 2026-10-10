@@ -8,6 +8,7 @@ module;
 #include <ftxui/dom/direction.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/dom/flexbox_config.hpp>
+#include <ftxui/dom/image.hpp>
 #include <ftxui/dom/linear_gradient.hpp>
 #include <ftxui/dom/node.hpp>
 #include <ftxui/dom/requirement.hpp>
@@ -30,6 +31,12 @@ export namespace ftxui {
     using ftxui::Elements;
     using ftxui::FlexboxConfig;
     using ftxui::GraphFunction;
+    using ftxui::ImageAlign;
+    using ftxui::ImageFit;
+    using ftxui::ImageMargin;
+    using ftxui::ImageOptions;
+    using ftxui::ImageRenderer;
+    using ftxui::ImageStatus;
     using ftxui::LinearGradient;
     using ftxui::Node;
     using ftxui::Requirement;
@@ -83,6 +90,23 @@ export namespace ftxui {
     using ftxui::graph;
     using ftxui::emptyElement;
     using ftxui::canvas;
+    using ftxui::image;
+
+    using ftxui::GetImageStatus;
+    using ftxui::SetImageLoadedCallback;
+    using ftxui::ReloadImage;
+    using ftxui::ClearImageCache;
+    using ftxui::SetImageCacheSize;
+    using ftxui::SetScaledImageCacheSize;
+    using ftxui::SetMaxConcurrentImageLoads;
+
+    // The API of the `ftxui-image-view` library.
+    using ftxui::image_view;
+    using ftxui::setOnImageLoadedCallback;
+    using ftxui::setImageCacheMaxSize;
+    using ftxui::setImageResizeCacheMaxSize;
+    using ftxui::setImageCharCacheMaxSize;
+    using ftxui::setMaxConcurrentImageLoads;
 
     using ftxui::bold;
     using ftxui::dim;

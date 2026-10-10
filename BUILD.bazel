@@ -36,11 +36,15 @@ ftxui_cc_library(
 ftxui_cc_library(
     name = "screen",
     srcs = [
+        "src/ftxui/screen/bitmap.cpp",
+        "src/ftxui/screen/bitmap_internal.hpp",
         "src/ftxui/screen/box.cpp",
         "src/ftxui/screen/color.cpp",
         "src/ftxui/screen/color_info.cpp",
         "src/ftxui/screen/surface.cpp",
         "src/ftxui/screen/screen.cpp",
+        "src/ftxui/screen/sixel.cpp",
+        "src/ftxui/screen/stb_image.h",
         "src/ftxui/screen/string.cpp",
         "src/ftxui/screen/string_internal.hpp",
         "src/ftxui/screen/string_unicode_tables.ipp",
@@ -49,6 +53,7 @@ ftxui_cc_library(
         "src/ftxui/util/ref.cpp",
     ],
     hdrs = [
+        "include/ftxui/screen/bitmap.hpp",
         "include/ftxui/screen/box.hpp",
         "include/ftxui/screen/cell.hpp",
         "include/ftxui/screen/color.hpp",
@@ -57,6 +62,7 @@ ftxui_cc_library(
         "include/ftxui/screen/image.hpp",
         "include/ftxui/screen/pixel.hpp",
         "include/ftxui/screen/screen.hpp",
+        "include/ftxui/screen/sixel.hpp",
         "include/ftxui/screen/string.hpp",
         "include/ftxui/screen/surface.hpp",
         "include/ftxui/screen/terminal.hpp",
@@ -99,6 +105,8 @@ ftxui_cc_library(
         "src/ftxui/dom/gridbox.cpp",
         "src/ftxui/dom/hbox.cpp",
         "src/ftxui/dom/hyperlink.cpp",
+        "src/ftxui/dom/image.cpp",
+        "src/ftxui/dom/image_internal.hpp",
         "src/ftxui/dom/inverted.cpp",
         "src/ftxui/dom/italic.cpp",
         "src/ftxui/dom/linear_gradient.cpp",
@@ -127,6 +135,7 @@ ftxui_cc_library(
         "include/ftxui/dom/direction.hpp",
         "include/ftxui/dom/elements.hpp",
         "include/ftxui/dom/flexbox_config.hpp",
+        "include/ftxui/dom/image.hpp",
         "include/ftxui/dom/linear_gradient.hpp",
         "include/ftxui/dom/node.hpp",
         "include/ftxui/dom/requirement.hpp",
@@ -135,7 +144,16 @@ ftxui_cc_library(
         "include/ftxui/dom/take_any_args.hpp",
         "include/ftxui/util/export.hpp",
         "include/ftxui/util/warn_windows_macro.hpp",
+
+        # The header of the `ftxui-image-view` library, which the image
+        # element replaces: #include "image_view.hpp"
+        "include/image_view.hpp",
     ],
+    # Images are loaded by background threads.
+    linkopts = select({
+        "@platforms//os:windows": [],
+        "//conditions:default": ["-pthread"],
+    }),
     deps = [":screen"],
 )
 
@@ -184,6 +202,7 @@ ftxui_cc_library(
         "src/ftxui/component/window.cpp",
 
         # Private header from ftxui:dom.
+        "src/ftxui/dom/image_internal.hpp",
         "src/ftxui/dom/node_decorator.hpp",
 
         # Private header from ftxui:screen.

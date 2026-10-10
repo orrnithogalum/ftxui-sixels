@@ -22,6 +22,7 @@ dom_sources = files(
   'gridbox.cpp',
   'hbox.cpp',
   'hyperlink.cpp',
+  'image.cpp',
   'inverted.cpp',
   'italic.cpp',
   'linear_gradient.cpp',

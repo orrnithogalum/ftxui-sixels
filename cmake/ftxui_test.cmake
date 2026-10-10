@@ -41,6 +41,7 @@ add_executable(ftxui-tests
   src/ftxui/dom/gridbox_test.cpp
   src/ftxui/dom/hbox_test.cpp
   src/ftxui/dom/hyperlink_test.cpp
+  src/ftxui/dom/image_test.cpp
   src/ftxui/dom/italic_test.cpp
   src/ftxui/dom/linear_gradient_test.cpp
   src/ftxui/dom/scroll_indicator_test.cpp
@@ -51,9 +52,13 @@ add_executable(ftxui-tests
   src/ftxui/dom/text_test.cpp
   src/ftxui/dom/underlined_test.cpp
   src/ftxui/dom/vbox_test.cpp
+  src/ftxui/screen/bitmap_test.cpp
   src/ftxui/screen/color_test.cpp
   src/ftxui/screen/compatibility_test.cpp
+  src/ftxui/screen/graphics_test.cpp
   src/ftxui/screen/screen_test.cpp
+  src/ftxui/screen/sixel_test.cpp
+  src/ftxui/screen/sixel_test_util.hpp
   src/ftxui/screen/string_test.cpp
   src/ftxui/util/ref_test.cpp
 )

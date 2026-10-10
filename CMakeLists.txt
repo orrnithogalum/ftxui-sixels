@@ -48,6 +48,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(cmake/ftxui_message.cmake)
 
 add_library(screen
+  include/ftxui/screen/bitmap.hpp
   include/ftxui/screen/box.hpp
   include/ftxui/screen/cell.hpp
   include/ftxui/screen/color.hpp
@@ -55,16 +56,21 @@ add_library(screen
   include/ftxui/screen/image.hpp
   include/ftxui/screen/pixel.hpp
   include/ftxui/screen/screen.hpp
+  include/ftxui/screen/sixel.hpp
   include/ftxui/screen/string.hpp
   include/ftxui/screen/surface.hpp
   include/ftxui/util/export.hpp
   include/ftxui/util/ref.hpp
   src/ftxui/util/ref.cpp
+  src/ftxui/screen/bitmap.cpp
+  src/ftxui/screen/bitmap_internal.hpp
   src/ftxui/screen/box.cpp
   src/ftxui/screen/color.cpp
   src/ftxui/screen/color_info.cpp
   src/ftxui/screen/surface.cpp
   src/ftxui/screen/screen.cpp
+  src/ftxui/screen/sixel.cpp
+  src/ftxui/screen/stb_image.h
   src/ftxui/screen/string.cpp
   src/ftxui/screen/string_unicode_tables.ipp
   src/ftxui/screen/terminal.cpp
@@ -76,6 +82,7 @@ add_library(dom
   include/ftxui/dom/direction.hpp
   include/ftxui/dom/elements.hpp
   include/ftxui/dom/flexbox_config.hpp
+  include/ftxui/dom/image.hpp
   include/ftxui/dom/node.hpp
   include/ftxui/dom/requirement.hpp
   include/ftxui/dom/selection.hpp
@@ -106,6 +113,8 @@ add_library(dom
   src/ftxui/dom/gridbox.cpp
   src/ftxui/dom/hbox.cpp
   src/ftxui/dom/hyperlink.cpp
+  src/ftxui/dom/image.cpp
+  src/ftxui/dom/image_internal.hpp
   src/ftxui/dom/inverted.cpp
   src/ftxui/dom/italic.cpp
   src/ftxui/dom/linear_gradient.cpp
@@ -177,9 +186,26 @@ add_library(component
 target_link_libraries(dom PUBLIC screen)
 target_link_libraries(component PUBLIC dom)
 
+# Images are loaded by background threads.
+find_package(Threads)
+if (Threads_FOUND)
+  target_link_libraries(dom PUBLIC Threads::Threads)
+endif()
+
 add_library(ftxui INTERFACE)
 target_link_libraries(ftxui INTERFACE component)
 add_library(ftxui::ftxui ALIAS ftxui)
+
+# The image element replaces the `ftxui-image-view` and the
+# `ftxui-image-view-async` libraries. Provide the target they define, and the
+# header they are used with: <image_view.hpp>. This way, a project depending
+# on them only has to stop fetching them.
+if (NOT TARGET ftxui-image-view)
+  add_library(ftxui-image-view INTERFACE)
+  target_link_libraries(ftxui-image-view INTERFACE component)
+  set_target_properties(ftxui-image-view PROPERTIES EXPORT_NAME image-view)
+  add_library(ftxui::image-view ALIAS ftxui-image-view)
+endif()
 
 include(cmake/ftxui_set_options.cmake)
 ftxui_set_options(screen)

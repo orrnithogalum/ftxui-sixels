@@ -3,6 +3,7 @@
 
 module;
 
+#include <ftxui/screen/bitmap.hpp>
 #include <ftxui/screen/box.hpp>
 #include <ftxui/screen/cell.hpp>
 #include <ftxui/screen/color.hpp>
@@ -11,6 +12,7 @@ module;
 #include <ftxui/screen/image.hpp>
 #include <ftxui/screen/pixel.hpp>
 #include <ftxui/screen/screen.hpp>
+#include <ftxui/screen/sixel.hpp>
 #include <ftxui/screen/string.hpp>
 #include <ftxui/screen/surface.hpp>
 #include <ftxui/screen/terminal.hpp>
@@ -22,6 +24,8 @@ export module ftxui.screen;
  * @brief The FTXUI ftxui:: namespace
  */
 export namespace ftxui {
+    using ftxui::Bitmap;
+    using ftxui::BitmapFilter;
     using ftxui::Box;
     using ftxui::Cell;
     using ftxui::Color;
@@ -30,7 +34,13 @@ export namespace ftxui {
     using ftxui::Image;
     using ftxui::Pixel;
     using ftxui::Screen;
+    using ftxui::SixelDither;
+    using ftxui::SixelImage;
+    using ftxui::SixelPalette;
     using ftxui::Surface;
+
+    using ftxui::EncodeSixel;
+    using ftxui::SetSixelCacheSize;
 
     using ftxui::CellToGlyphIndex;
     using ftxui::GetColorInfo;
@@ -61,6 +71,16 @@ export namespace ftxui {
         using ftxui::Terminal::SetFallbackSize;
         using ftxui::Terminal::ColorSupport;
         using ftxui::Terminal::SetColorSupport;
+        using ftxui::Terminal::CellPixelSize;
+        using ftxui::Terminal::SetCellPixelSize;
+        using ftxui::Terminal::SetReportedCellPixelSize;
+        using ftxui::Terminal::SixelSupport;
+        using ftxui::Terminal::SetSixelSupport;
+        using ftxui::Terminal::SetDetectedSixelSupport;
+        using ftxui::Terminal::SixelLastRowSupport;
+        using ftxui::Terminal::SetSixelLastRowSupport;
+        using ftxui::Terminal::SetDetectedSixelLastRowSupport;
+        using ftxui::Terminal::QueryGraphics;
         using ftxui::Terminal::Quirks;
         using ftxui::Terminal::GetQuirks;
         using ftxui::Terminal::SetQuirks;

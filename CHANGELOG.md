@@ -4,6 +4,28 @@ Changelog
 Next
 ====
 
+### Images (this fork)
+- Feature: Add the `image` element, displaying a picture from a file, a URL or
+  a `ftxui::Bitmap`. It is drawn with pixels using the sixel protocol, and
+  falls back to unicode half blocks. It scales to the box it is given, down and
+  up. See `ftxui::ImageOptions` for the fitting, the centering, the margins and
+  the size constraints. See `doc/image.md`.
+- Feature: Add `image_view` and `<image_view.hpp>`: the API of the
+  `ftxui-image-view` and of the `ftxui-image-view-async` libraries. The CMake
+  target `ftxui-image-view` is provided.
+- Feature: Add `Screen::DrawGraphic`, to display a `ftxui::Bitmap` over a
+  rectangle of cells. Graphics are part of `Screen::ToString()`.
+  `Screen::ToStringIncremental()` doesn't send again the ones the terminal is
+  already displaying. This is what `ftxui::App` uses.
+- Feature: Add `ftxui::Bitmap`, `ftxui::EncodeSixel` and `ftxui::SixelPalette`.
+- Feature: Add `Terminal::SixelSupport`, `Terminal::CellPixelSize`,
+  `Terminal::SixelLastRowSupport` and `Terminal::QueryGraphics`. An
+  `ftxui::App` detects them from the terminal. They can be overridden with the
+  environment variables `FTXUI_SIXEL`, `FTXUI_CELL_SIZE` and
+  `FTXUI_SIXEL_LAST_ROW`.
+- Breaking: `ftxui::Cell` has a new field: `graphic`. `ftxui::Screen` has new
+  fields. This changes the ABI.
+
 ### Component
 - Feature: Support Alt+Arrow keys (word navigation for Left/Right) and
   Alt+Backspace (delete word backward) in the `Input` component.

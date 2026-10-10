@@ -27,7 +27,7 @@ endif()
 
 if(_ftxui_isMultiConfig)
   install(
-    TARGETS screen dom component ftxui
+    TARGETS screen dom component ftxui ftxui-image-view
     EXPORT ftxui-targets
     ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}/$<CONFIG>"
     LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/$<CONFIG>"
@@ -35,7 +35,7 @@ if(_ftxui_isMultiConfig)
   )
 else()
   install(
-    TARGETS screen dom component ftxui
+    TARGETS screen dom component ftxui ftxui-image-view
     EXPORT ftxui-targets
     ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
@@ -45,6 +45,13 @@ endif()
 
 install(
   DIRECTORY include/ftxui
+  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+  )
+
+# The header of the `ftxui-image-view` library, which the image element
+# replaces.
+install(
+  FILES include/image_view.hpp
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
   )
 

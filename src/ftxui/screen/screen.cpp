@@ -1,17 +1,26 @@
 // Copyright 2020 Arthur Sonzogni. All rights reserved.
 // Use of this source code is governed by the MIT license that can be found in
 // the LICENSE file.
-#include <cstddef>  // for size_t
+#include <algorithm>  // for find, max, min
+#include <array>      // for array
+#include <cstddef>    // for size_t
 #include <cstdint>
+#include <cstring>  // for memcpy, strcmp
 #include <iostream>  // for cout, flush
 #include <limits>
+#include <list>    // for list
 #include <map>     // for _Rb_tree_const_iterator, map, operator!=, operator==
+#include <mutex>   // for mutex, lock_guard
 #include <string>  // for string
-#include <string_view>  // for string_view
-#include <utility>      // for pair
+#include <string_view>    // for string_view
+#include <type_traits>    // for is_trivially_copyable
+#include <unordered_map>  // for unordered_map
+#include <utility>        // for pair
+#include <vector>         // for vector
 
 #include "ftxui/screen/cell.hpp"  // for Cell
 #include "ftxui/screen/screen.hpp"
+#include "ftxui/screen/sixel.hpp"     // for EncodeSixel, SixelImage
 #include "ftxui/screen/string.hpp"    // for string_width
 #include "ftxui/screen/surface.hpp"   // for Surface
 #include "ftxui/screen/terminal.hpp"  // for Dimensions, Size
@@ -172,6 +181,91 @@ void UpdateCellStyle(const Screen* screen,
     }
   }
 }
+
+// --- Graphics ---------------------------------------------------------------
+
+// Encoding a graphic is expensive: the result is kept. This is useful when a
+// graphic comes back after being hidden, or when a screen is printed several
+// times.
+class SixelCache {
+ public:
+  // Never destroyed: it must remain usable until the very end of the program.
+  static SixelCache& Get() {
+    static auto* cache = new SixelCache();  // NOLINT
+    return *cache;
+  }
+
+  // Returns whether `key` was found. If so, `out` receives the value.
+  bool Find(const std::string& key, std::string* out) {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    auto it = index_.find(key);
+    if (it == index_.end()) {
+      return false;
+    }
+    entries_.splice(entries_.begin(), entries_, it->second);
+    *out = it->second->second;
+    return true;
+  }
+
+  void Insert(const std::string& key, const std::string& value) {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    if (value.size() > max_bytes_ || index_.count(key) != 0) {
+      return;
+    }
+    entries_.emplace_front(key, value);
+    index_[key] = entries_.begin();
+    bytes_ += value.size();
+    while (bytes_ > max_bytes_ && !entries_.empty()) {
+      bytes_ -= entries_.back().second.size();
+      index_.erase(entries_.back().first);
+      entries_.pop_back();
+    }
+  }
+
+  void SetMaxBytes(size_t max_bytes) {
+    const std::lock_guard<std::mutex> lock(mutex_);
+    max_bytes_ = max_bytes;
+    while (bytes_ > max_bytes_ && !entries_.empty()) {
+      bytes_ -= entries_.back().second.size();
+      index_.erase(entries_.back().first);
+      entries_.pop_back();
+    }
+  }
+
+ private:
+  using Entry = std::pair<std::string, std::string>;
+  std::mutex mutex_;
+  std::list<Entry> entries_;  // Most recently used first.
+  std::unordered_map<std::string, std::list<Entry>::iterator> index_;
+  size_t bytes_ = 0;
+  size_t max_bytes_ = size_t{64} << 20;  // 64 MiB.
+};
+
+template <class T>
+void AppendBytes(std::string& out, const T& value) {
+  static_assert(std::is_trivially_copyable_v<T>);
+  char buffer[sizeof(T)];  // NOLINT
+  std::memcpy(buffer, &value, sizeof(T));
+  out.append(buffer, sizeof(T));  // NOLINT
+}
+
+bool IsGraphicCell(const Cell& cell, size_t id) {
+  return cell.graphic == id &&
+         std::strcmp(cell.character.c_str(), Cell::GraphicCharacter()) == 0;
+}
+
+// What to do about a graphic, when printing the screen.
+struct GraphicPlan {
+  // Whether the graphic has at least one cell left.
+  bool visible = false;
+  // Whether the terminal is already displaying it.
+  bool retained = false;
+  // The cells to draw, and where.
+  Box box;
+  SixelImage image;
+  // What identifies the result of encoding `image`.
+  std::string key;
+};
 
 struct TileEncoding {
   std::uint8_t left : 2;
@@ -472,10 +566,221 @@ std::string Screen::ToString() const {
 /// terminal.
 /// @param ss The string to append to.
 void Screen::ToString(std::string& ss) const {
+  ToStringInternal(ss, nullptr, nullptr);
+}
+
+bool Screen::ToStringIncremental(std::string& ss) {
+  std::vector<std::string> next;
+  const bool changed = ToStringInternal(ss, &displayed_graphics_, &next);
+  displayed_graphics_ = std::move(next);
+  return changed;
+}
+
+void Screen::ResetGraphics() {
+  displayed_graphics_.clear();
+}
+
+/// @brief Display a graphic over a rectangle of cells.
+void Screen::DrawGraphic(Graphic graphic) {
+  if (graphic.bitmap.empty() || graphic.width <= 0 || graphic.height <= 0 ||
+      graphic.cell_width <= 0 || graphic.cell_height <= 0) {
+    return;
+  }
+  if (graphics_.size() >= std::numeric_limits<uint16_t>::max()) {
+    return;
+  }
+
+  const int x_min = std::max({graphic.x, stencil.x_min, 0});
+  const int y_min = std::max({graphic.y, stencil.y_min, 0});
+  const int x_max =
+      std::min({graphic.x + graphic.width - 1, stencil.x_max, dimx_ - 1});
+  const int y_max =
+      std::min({graphic.y + graphic.height - 1, stencil.y_max, dimy_ - 1});
+  if (x_min > x_max || y_min > y_max) {
+    return;
+  }
+
+  const auto id = static_cast<uint16_t>(graphics_.size() + 1);
+  for (int y = y_min; y <= y_max; ++y) {
+    for (int x = x_min; x <= x_max; ++x) {
+      Cell& cell = FastCellAt(x, y);
+      cell.character = Cell::GraphicCharacter();
+      cell.graphic = id;
+    }
+  }
+  graphics_.push_back(std::move(graphic));
+}
+
+// Print the screen. The graphics listed in `previous` are assumed to be
+// displayed by the terminal: they are left untouched instead of being sent
+// again. The graphics displayed afterward are listed in `next`.
+// Returns whether a graphic was added, updated or removed.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+bool Screen::ToStringInternal(std::string& ss,
+                              const std::vector<std::string>* previous,
+                              std::vector<std::string>* next) const {
+  // ---------------------------------------------------------------------------
+  // Step 1: Find what remains visible of each graphic.
+  // ---------------------------------------------------------------------------
+  std::vector<GraphicPlan> plans(graphics_.size());
+  bool changed = false;
+
+  // Drawing an image on the last row of a terminal makes many of them scroll,
+  // because they move the cursor to the line below the image. The last row of
+  // the screen might be the last row of the terminal. Unless the terminal is
+  // known to be able to leave the cursor in place, graphics stay away from
+  // it: their cells of the last row display nothing.
+  const bool last_row_support = Terminal::SixelLastRowSupport();
+  const int last_row = last_row_support ? dimy_ - 1 : dimy_ - 2;
+
+  for (size_t i = 0; i < graphics_.size(); ++i) {
+    const Graphic& graphic = graphics_[i];
+    GraphicPlan& plan = plans[i];
+    const size_t id = i + 1;
+
+    const int x_min = std::max(graphic.x, 0);
+    const int y_min = std::max(graphic.y, 0);
+    const int x_max = std::min(graphic.x + graphic.width - 1, dimx_ - 1);
+    const int y_max = std::min(graphic.y + graphic.height - 1, last_row);
+
+    // The bounding box of its cells.
+    Box& box = plan.box;
+    box = Box{dimx_, -1, dimy_, -1};
+    for (int y = y_min; y <= y_max; ++y) {
+      for (int x = x_min; x <= x_max; ++x) {
+        if (!IsGraphicCell(FastCellAt(x, y), id)) {
+          continue;
+        }
+        box.x_min = std::min(box.x_min, x);
+        box.x_max = std::max(box.x_max, x);
+        box.y_min = std::min(box.y_min, y);
+        box.y_max = std::max(box.y_max, y);
+      }
+    }
+    if (box.x_min > box.x_max || box.y_min > box.y_max) {
+      continue;
+    }
+    plan.visible = true;
+
+    // Inside the bounding box: which cells are drawn. Also, a hash of what is
+    // displayed behind them, which shows through the transparent pixels.
+    const int columns = box.x_max - box.x_min + 1;
+    const int rows = box.y_max - box.y_min + 1;
+    SixelImage& image = plan.image;
+    image.mask.assign(static_cast<size_t>(columns) * static_cast<size_t>(rows),
+                      0);
+    bool full = true;
+    uint64_t style = 14695981039346656037ULL;  // FNV-1a
+    auto hash = [&](const void* data, size_t size) {
+      const auto* bytes = static_cast<const unsigned char*>(data);
+      for (size_t k = 0; k < size; ++k) {
+        style = (style ^ bytes[k]) * 1099511628211ULL;  // NOLINT
+      }
+    };
+    for (int y = box.y_min; y <= box.y_max; ++y) {
+      for (int x = box.x_min; x <= box.x_max; ++x) {
+        const Cell& cell = FastCellAt(x, y);
+        if (!IsGraphicCell(cell, id)) {
+          full = false;
+          continue;
+        }
+        image.mask[static_cast<size_t>(y - box.y_min) *
+                       static_cast<size_t>(columns) +
+                   static_cast<size_t>(x - box.x_min)] = 1;
+        // Every style is visible on a blank cell, one way or another.
+        const std::array<unsigned char, 6> styles = {
+            static_cast<unsigned char>(cell.inverted),
+            static_cast<unsigned char>(cell.underlined),
+            static_cast<unsigned char>(cell.underlined_double),
+            static_cast<unsigned char>(cell.strikethrough),
+            static_cast<unsigned char>(cell.blink),
+            cell.hyperlink,
+        };
+        hash(&cell.background_color, sizeof(Color));
+        hash(&cell.foreground_color, sizeof(Color));
+        hash(styles.data(), styles.size());
+      }
+    }
+    if (full) {
+      image.mask.clear();
+    }
+
+    image.bitmap = graphic.bitmap;
+    image.palette = graphic.palette;
+    image.colors = graphic.colors;
+    image.dither = graphic.dither;
+    image.width = columns * graphic.cell_width;
+    image.height = rows * graphic.cell_height;
+    image.offset_x =
+        graphic.offset_x - (box.x_min - graphic.x) * graphic.cell_width;
+    image.offset_y =
+        graphic.offset_y - (box.y_min - graphic.y) * graphic.cell_height;
+    image.mask_columns = columns;
+    image.mask_cell_width = graphic.cell_width;
+    image.mask_cell_height = graphic.cell_height;
+    image.background = graphic.background;
+
+    // What identifies the pixels sent to the terminal.
+    std::string& key = plan.key;
+    AppendBytes(key, graphic.bitmap.id());
+    AppendBytes(key, graphic.palette ? graphic.palette->id() : uint64_t{0});
+    AppendBytes(key, image.colors);
+    AppendBytes(key, image.dither);
+    AppendBytes(key, image.width);
+    AppendBytes(key, image.height);
+    AppendBytes(key, image.offset_x);
+    AppendBytes(key, image.offset_y);
+    AppendBytes(key, image.mask_cell_width);
+    AppendBytes(key, image.mask_cell_height);
+    AppendBytes(key, image.background.GetAlpha() != 0);
+    AppendBytes(key, image.background.GetRed());
+    AppendBytes(key, image.background.GetGreen());
+    AppendBytes(key, image.background.GetBlue());
+    key.append(image.mask.begin(), image.mask.end());
+
+    // What identifies what the terminal displays: the same, plus where, and
+    // above what.
+    std::string signature = key;
+    AppendBytes(signature, box.x_min);
+    AppendBytes(signature, box.y_min);
+    AppendBytes(signature, style);
+
+    plan.retained = previous && std::find(previous->begin(), previous->end(),
+                                          signature) != previous->end();
+    changed |= !plan.retained;
+    if (next) {
+      next->push_back(std::move(signature));
+    }
+  }
+
+  // A graphic which is gone is a change: text is printed over it below.
+  if (previous && next) {
+    for (const std::string& signature : *previous) {
+      changed |=
+          std::find(next->begin(), next->end(), signature) == next->end();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Step 2: Print the text.
+  // ---------------------------------------------------------------------------
   const Cell default_cell;
   const Cell* previous_cell_ref = &default_cell;
   const Terminal::Color color_support = Terminal::ColorSupport();
   ColorSequence last_colors;
+
+  // The cells of a graphic the terminal is already displaying are skipped by
+  // moving the cursor forward. Printing them would erase it.
+  int skipped = 0;
+  auto flush_skipped = [&] {
+    if (skipped == 0) {
+      return;
+    }
+    ss += "\x1B[";
+    ss += std::to_string(skipped);
+    ss += 'C';
+    skipped = 0;
+  };
 
   for (int y = 0; y < dimy_; ++y) {
     // New line in between two lines.
@@ -493,7 +798,27 @@ void Screen::ToString(std::string& ss) const {
       const Cell* line_end = line_start + dimx_;
       for (const Cell* it = line_start; it != line_end; ++it) {
         const auto& cell = *it;
+
+        // A cell displaying a graphic.
+        if (FTXUI_UNLIKELY(cell.graphic != 0) && cell.graphic <= plans.size() &&
+            IsGraphicCell(cell, cell.graphic)) {
+          if (!previous_fullwidth) {
+            if (plans[cell.graphic - 1].retained && y <= last_row) {
+              skipped++;
+            } else {
+              flush_skipped();
+              UpdateCellStyle(this, ss, color_support, last_colors,
+                              *previous_cell_ref, cell);
+              previous_cell_ref = &cell;
+              ss += ' ';
+            }
+          }
+          previous_fullwidth = false;
+          continue;
+        }
+
         if (!previous_fullwidth) {
+          flush_skipped();
           UpdateCellStyle(this, ss, color_support, last_colors,
                           *previous_cell_ref, cell);
           previous_cell_ref = &cell;
@@ -510,11 +835,63 @@ void Screen::ToString(std::string& ss) const {
         }
       }
     }
+    flush_skipped();
   }
 
   // Reset the style to default:
   UpdateCellStyle(this, ss, color_support, last_colors, *previous_cell_ref,
                   default_cell);
+
+  // ---------------------------------------------------------------------------
+  // Step 3: Draw the graphics, over the text.
+  // ---------------------------------------------------------------------------
+  // The DEC private mode 8452: after an image, the cursor is left on its
+  // last row, instead of being moved below. See above.
+  bool cursor_mode_set = false;
+  for (const GraphicPlan& plan : plans) {
+    if (!plan.visible || plan.retained) {
+      continue;
+    }
+
+    std::string sixel;
+    if (!SixelCache::Get().Find(plan.key, &sixel)) {
+      sixel = EncodeSixel(plan.image);
+      SixelCache::Get().Insert(plan.key, sixel);
+    }
+    if (sixel.empty()) {
+      continue;
+    }
+
+    if (last_row_support && !cursor_mode_set) {
+      ss += "\x1B[?8452h";
+      cursor_mode_set = true;
+    }
+
+    // The cursor is at the end of the last line. Save its position, move to
+    // the top-left cell of the graphic, draw, then restore its position.
+    // Where a terminal leaves the cursor after drawing a graphic is
+    // unreliable.
+    ss += "\0337";  // DECSC
+    ss += '\r';
+    const int up = dimy_ - 1 - plan.box.y_min;
+    if (up > 0) {
+      ss += "\x1B[";
+      ss += std::to_string(up);
+      ss += 'A';
+    }
+    if (plan.box.x_min > 0) {
+      ss += "\x1B[";
+      ss += std::to_string(plan.box.x_min);
+      ss += 'C';
+    }
+    ss += sixel;
+    ss += "\0338";  // DECRC
+  }
+  if (cursor_mode_set) {
+    ss += "\x1B[?8452l";
+  }
+
+  return changed;
 }
 
 // Print the Screen to the terminal.
@@ -584,6 +961,8 @@ void Screen::Clear() {
   hyperlinks_ = {
       "",
   };
+
+  graphics_.clear();
 }
 
 // clang-format off
@@ -644,6 +1023,13 @@ const Screen::SelectionStyle& Screen::GetSelectionStyle() const {
 /// @see GetSelectionStyle
 void Screen::SetSelectionStyle(SelectionStyle decorator) {
   selection_style_ = std::move(decorator);
+}
+
+/// @brief Set how much memory is used to remember encoded graphics.
+/// @param max_bytes The size, in bytes. The default is 64 MiB.
+/// @ingroup screen
+void SetSixelCacheSize(size_t max_bytes) {
+  SixelCache::Get().SetMaxBytes(max_bytes);
 }
 
 void Screen::Reserved1() {}

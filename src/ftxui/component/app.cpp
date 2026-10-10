@@ -35,6 +35,7 @@
 #include "ftxui/component/task_runner.hpp"
 #include "ftxui/component/terminal_input_parser.hpp"  // for TerminalInputParser
 #include "ftxui/dom/elements.hpp"                     // for Dimension::Fit
+#include "ftxui/dom/image_internal.hpp"               // for SetImageRefreshHook
 #include "ftxui/dom/node.hpp"                         // for Node, Render
 #include "ftxui/screen/cell.hpp"                      // for Cell
 #include "ftxui/screen/terminal.hpp"                  // for Dimensions, Size
@@ -92,6 +93,75 @@ void ftxui_on_resize(int columns, int rows) {
 }
 }
 #endif
+
+namespace {
+
+// The query for the size of a cell, in pixels: XTWINOPS 16.
+constexpr std::string_view g_query_cell_pixel_size = "\033[16t";
+
+// Parse the reply of the terminal to the query above:
+//   CSI 6 ; height ; width t
+bool ParseCellPixelSize(std::string_view input, Dimensions* out) {
+  constexpr std::string_view prefix = "\033[6;";
+  if (input.size() < prefix.size() + 4 ||
+      input.substr(0, prefix.size()) != prefix || input.back() != 't') {
+    return false;
+  }
+  input = input.substr(prefix.size(), input.size() - prefix.size() - 1);
+
+  std::array<int, 2> values = {0, 0};
+  size_t index = 0;
+  constexpr int max_value = 1 << 12;
+  for (const char c : input) {
+    if (c == ';') {
+      if (++index >= values.size()) {
+        return false;
+      }
+      continue;
+    }
+    if (c < '0' || c > '9') {
+      return false;
+    }
+    values[index] = values[index] * 10 + (c - '0');  // NOLINT
+    if (values[index] > max_value) {
+      return false;
+    }
+  }
+  if (index != 1 || values[0] <= 0 || values[1] <= 0) {
+    return false;
+  }
+  *out = Dimensions{values[1], values[0]};
+  return true;
+}
+
+// The query for the state of the DEC private mode 8452, which leaves the cursor
+// next to a sixel image, instead of below: DECRQM.
+constexpr std::string_view g_query_sixel_cursor_mode = "\033[?8452$p";
+
+// Parse the reply of the terminal to the query above:
+//   CSI ? 8452 ; state $ y
+// The state is: 0: unknown, 1: set, 2: reset, 3: always set, 4: always reset.
+bool ParseSixelCursorMode(std::string_view input, bool* known) {
+  constexpr std::string_view prefix = "\033[?8452;";
+  constexpr std::string_view suffix = "$y";
+  if (input.size() != prefix.size() + 1 + suffix.size() ||
+      input.substr(0, prefix.size()) != prefix ||
+      input.substr(input.size() - suffix.size()) != suffix) {
+    return false;
+  }
+  const char state = input[prefix.size()];
+  *known = (state >= '1' && state <= '3');
+  return true;
+}
+
+// Whether the "Device Attributes" of a terminal include sixel graphics.
+bool HasSixel(const std::vector<int>& capabilities) {
+  constexpr int sixel = 4;
+  return std::find(capabilities.begin(), capabilities.end(), sixel) !=
+         capabilities.end();
+}
+
+}  // namespace
 
 struct App::Internal {
   App* public_;
@@ -581,6 +651,15 @@ void App::Internal::ExitNow() {
 void App::Internal::Install() {
   frame_valid_ = false;
 
+  // Whatever graphic was displayed is not to be relied on anymore.
+  public_->ResetGraphics();
+
+  // Images are loaded in the background. Draw a new frame when one is ready.
+  // This is called from another thread: Post() is thread safe.
+  internal::SetImageRefreshHook(
+      [this] { public_->Post(Closure([this] { frame_valid_ = false; })); });
+  on_exit_functions.emplace([] { internal::SetImageRefreshHook({}); });
+
   // Flush the buffer for stdout to ensure whatever the user has printed before
   // is fully applied before we start modifying the terminal configuration. This
   // is important, because we are using two different channels (stdout vs
@@ -891,6 +970,22 @@ void App::Internal::HandleTask(Component component, Task& task) {
 
       if (arg.IsTerminalCapabilities()) {
         terminal_capabilities_ = arg.TerminalCapabilities();
+        Terminal::SetDetectedSixelSupport(HasSixel(terminal_capabilities_));
+        frame_valid_ = false;
+        return;
+      }
+
+      Dimensions cell_pixel_size{};
+      if (ParseCellPixelSize(arg.input(), &cell_pixel_size)) {
+        Terminal::SetReportedCellPixelSize(cell_pixel_size);
+        frame_valid_ = false;
+        return;
+      }
+
+      bool sixel_cursor_mode = false;
+      if (ParseSixelCursorMode(arg.input(), &sixel_cursor_mode)) {
+        Terminal::SetDetectedSixelLastRowSupport(sixel_cursor_mode);
+        frame_valid_ = false;
         return;
       }
 
@@ -1044,6 +1139,18 @@ void App::Internal::Draw(Component component) {
       frame_count_ == 0 || (dimx != public_->dimx_) || (dimy != public_->dimy_);
   TerminalSend(ResetCursorPosition());
 
+  // The graphics drawn by the previous frames are kept by the terminal, and
+  // not sent again, unless what is displayed is about to be cleared or moved.
+  if (resized || !print_above_.empty()) {
+    public_->ResetGraphics();
+  }
+
+  // Resizing the terminal often comes with a new font size. Ask again for the
+  // size of a cell.
+  if (resized && frame_count_ != 0 && is_stdin_a_tty_ && is_stdout_a_tty_) {
+    TerminalSend(g_query_cell_pixel_size);
+  }
+
   if (frame_count_ != 0) {
     // Reset the cursor position to the lower left corner to start drawing the
     // new frame.
@@ -1124,8 +1231,15 @@ void App::Internal::Draw(Component component) {
     }
   }
 
-  public_->ToString(output_buffer);
+  const bool graphics_changed = public_->ToStringIncremental(output_buffer);
   TerminalSend(set_cursor_position_);
+  if (graphics_changed) {
+    // A graphic is drawn after the text it covers. Ask the terminal to
+    // display the frame as a whole, instead of flickering. This is the
+    // "synchronized output" mode. A terminal not supporting it ignores it.
+    output_buffer.insert(0, "\033[?2026h");
+    TerminalSend("\033[?2026l");
+  }
   TerminalFlush();
 
   public_->Clear();
@@ -1201,7 +1315,13 @@ void App::Internal::InstallTerminalInfo() {
     }
     TerminalSend("\033[>q");  // XTVERSION
     TerminalSend("\033[>c");  // DA2
-    TerminalSend("\033[c");   // DA1
+    // The size of a cell in pixels, to draw images. It is sent before DA1,
+    // which every terminal replies to: this way, the reply to DA1 tells there
+    // is nothing more to wait for.
+    TerminalSend(g_query_cell_pixel_size);
+    // Whether an image can be drawn on the last row without scrolling.
+    TerminalSend(g_query_sixel_cursor_mode);
+    TerminalSend("\033[c");  // DA1
     TerminalFlush();
   }
 
@@ -1225,6 +1345,17 @@ void App::Internal::InstallTerminalInfo() {
         if (event.IsTerminalCapabilities()) {
           terminal_capabilities_ = event.TerminalCapabilities();
           terminal_capabilities_received = true;
+          Terminal::SetDetectedSixelSupport(HasSixel(terminal_capabilities_));
+        }
+
+        Dimensions cell_pixel_size{};
+        if (ParseCellPixelSize(event.input(), &cell_pixel_size)) {
+          Terminal::SetReportedCellPixelSize(cell_pixel_size);
+        }
+
+        bool sixel_cursor_mode = false;
+        if (ParseSixelCursorMode(event.input(), &sixel_cursor_mode)) {
+          Terminal::SetDetectedSixelLastRowSupport(sixel_cursor_mode);
         }
 
         if (event.IsTerminalNameVersion()) {

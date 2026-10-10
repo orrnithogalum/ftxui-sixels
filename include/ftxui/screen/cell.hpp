@@ -44,6 +44,14 @@ struct FTXUI_EXPORT(SCREEN) Cell {
   // It's an index for accessing Screen meta data
   uint8_t hyperlink = 0;
 
+  // The graphic displayed by the cell.
+  // 0 is the default value, meaning no graphic: the cell displays text.
+  // Otherwise, this is the identifier given by Screen::DrawGraphic, and the
+  // cell shows the pixels of this graphic for as long as its `character`
+  // remains Cell::GraphicCharacter(). Hence, drawing text over a graphic
+  // replaces it, as for any other cell.
+  uint16_t graphic = 0;
+
   // The graphemes stored into the cell. To support combining characters,
   // like: a?, this can potentially contain multiple codepoints.
   std::string character = "";
@@ -51,6 +59,10 @@ struct FTXUI_EXPORT(SCREEN) Cell {
   // Colors:
   Color background_color = Color::Default;
   Color foreground_color = Color::Default;
+
+  /// @brief The `character` of a cell displaying a graphic. This is the
+  /// unicode "object replacement character": U+FFFC.
+  static const char* GraphicCharacter() { return "\xEF\xBF\xBC"; }
 };
 
 }  // namespace ftxui

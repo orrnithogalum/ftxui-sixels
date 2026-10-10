@@ -47,6 +47,47 @@ A simple cross-platform C++ library for terminal based user interfaces!
 > grid, transitions), and bind plain C++ state.
 > [Live demo](https://arthursonzogni.github.io/RTXUI/#interactive-playground).
 
+## This fork: images
+
+This is a fork of [FTXUI](https://github.com/ArthurSonzogni/FTXUI) adding an
+`image` element. Pictures are drawn with real pixels, using the
+[sixel](https://en.wikipedia.org/wiki/Sixel) protocol, with a fallback to
+unicode half blocks for the terminals without it.
+
+```cpp
+auto document = hbox({
+    image("cover.png", ImageOptions().Margin(1).MaxSize(40, 20)) | border,
+    paragraph("An image is an element like any other.") | flex,
+});
+```
+
+ * **Dynamic**: an image scales to the box its container gives it, **down and
+   up**, and follows the layout: terminal resized, split dragged, ...
+ * **Fitting**: contain, cover, fill, scale-down, none. Like CSS `object-fit`.
+ * **Centering**, at the pixel: start, center, end, on each axis.
+ * **Margins** and **size constraints**: preferred, minimal and maximal size,
+   bounds of the zoom factor.
+ * It composes: `border`, `flex`, `size`, `frame`, `dbox`, ... A dialog drawn
+   above an image cuts a hole in it.
+ * Efficient: an image is sent to the terminal once, not once per frame.
+ * No dependencies. PNG, JPEG, GIF, BMP, TGA, PSD, PNM. Loaded in the
+   background.
+ * A replacement for
+   [ftxui-image-view](https://github.com/ljrrjl/ftxui-image-view) and
+   [ftxui-image-view-async](https://github.com/orrnithogalum/ftxui-image-view-async):
+   `#include "image_view.hpp"`, `image_view(url)` and the CMake target
+   `ftxui-image-view` are provided.
+
+Try the demo:
+```bash
+cmake -S . -B build -DFTXUI_BUILD_EXAMPLES=ON
+cmake --build build --target ftxui_example_image_view
+./build/examples/component/ftxui_example_image_view [your pictures...]
+```
+
+Read [doc/image.md](doc/image.md) for the options, the terminals, and how to
+migrate from ftxui-image-view.
+
 ## Feature
  * Functional style. Inspired by
    [1](https://hackernoon.com/building-reactive-terminal-interfaces-in-c-d392ce34e649?gi=d9fb9ce35901)

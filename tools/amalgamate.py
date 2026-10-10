@@ -14,6 +14,9 @@ ROOT = Path(__file__).parent.parent
 SEARCH_PATHS = [ROOT / "include", ROOT / "src"]
 SRC_DIR = ROOT / "src"
 
+# Third party headers, vendored in src/.
+VERBATIM_HEADERS = ["ftxui/screen/stb_image.h"]
+
 # Regex (Stricter: Must be at start of line)
 FTXUI_INCLUDE_RE = re.compile(r'^\s*#include\s+[<"]ftxui/(.*)[>"]', re.MULTILINE)
 SYSTEM_INCLUDE_RE = re.compile(r'^\s*#include\s+<([^>]+)>', re.MULTILINE)
@@ -165,6 +168,11 @@ class Amalgamator:
         if rel_path in self.included_headers:
             return ""
         self.included_headers.add(rel_path)
+
+        # Third party headers are inlined as they are. Their includes depend on
+        # their own configuration macros, and must stay where they are.
+        if rel_path in VERBATIM_HEADERS:
+            return (SRC_DIR / rel_path).read_text(encoding='utf-8')
 
         path = None
         for p in SEARCH_PATHS:

@@ -52,17 +52,22 @@ ftxui_screen_dep = declare_dependency(
 )
 
 # --- dom library ---
+# Images are loaded by background threads.
+ftxui_threads_dep = dependency('threads')
+
 ftxui_dom = library('ftxui-dom',
   dom_sources,
   include_directories: ftxui_private_inc,
   cpp_args: ftxui_args + ['-DIS_FTXUI_DOM_IMPL=1'],
   link_with: ftxui_screen,
+  dependencies: ftxui_threads_dep,
   install: true,
 )
 
 ftxui_dom_dep = declare_dependency(
   include_directories: ftxui_public_inc,
   link_with: [ftxui_dom, ftxui_screen],
+  dependencies: ftxui_threads_dep,
 )
 
 # --- component library ---
@@ -81,6 +86,9 @@ ftxui_component_dep = declare_dependency(
 
 # Install headers
 install_subdir('include/ftxui', install_dir: get_option('includedir'))
+# The header of the `ftxui-image-view` library, which the image element
+# replaces.
+install_headers('include/image_view.hpp')
 
 # --- Tests ---
 if ftxui_build_tests
@@ -119,6 +127,7 @@ if ftxui_build_tests
     'src/ftxui/dom/gridbox_test.cpp',
     'src/ftxui/dom/hbox_test.cpp',
     'src/ftxui/dom/hyperlink_test.cpp',
+    'src/ftxui/dom/image_test.cpp',
     'src/ftxui/dom/italic_test.cpp',
     'src/ftxui/dom/linear_gradient_test.cpp',
     'src/ftxui/dom/scroll_indicator_test.cpp',
@@ -129,8 +138,11 @@ if ftxui_build_tests
     'src/ftxui/dom/text_test.cpp',
     'src/ftxui/dom/underlined_test.cpp',
     'src/ftxui/dom/vbox_test.cpp',
+    'src/ftxui/screen/bitmap_test.cpp',
     'src/ftxui/screen/color_test.cpp',
     'src/ftxui/screen/compatibility_test.cpp',
+    'src/ftxui/screen/graphics_test.cpp',
+    'src/ftxui/screen/sixel_test.cpp',
     'src/ftxui/screen/string_test.cpp',
     'src/ftxui/util/ref_test.cpp',
   )

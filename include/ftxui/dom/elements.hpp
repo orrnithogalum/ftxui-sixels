@@ -12,6 +12,7 @@
 #include "ftxui/dom/canvas.hpp"
 #include "ftxui/dom/direction.hpp"
 #include "ftxui/dom/flexbox_config.hpp"
+#include "ftxui/dom/image.hpp"
 #include "ftxui/dom/linear_gradient.hpp"
 #include "ftxui/dom/node.hpp"
 #include "ftxui/screen/box.hpp"
@@ -113,6 +114,9 @@ FTXUI_EXPORT(DOM) Element canvas(ConstRef<Canvas>);
 FTXUI_EXPORT(DOM)
 Element canvas(int width, int height, std::function<void(Canvas&)>);
 FTXUI_EXPORT(DOM) Element canvas(std::function<void(Canvas&)>);
+// Images are declared in "ftxui/dom/image.hpp":
+// Element image(std::string_view path_or_url, ImageOptions options = {});
+// Element image(Bitmap bitmap, ImageOptions options = {});
 
 // -- Decorator ---
 FTXUI_EXPORT(DOM) Element bold(Element);

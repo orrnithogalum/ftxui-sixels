@@ -37,6 +37,101 @@ enum Color : uint8_t {
 FTXUI_EXPORT(SCREEN) Color ColorSupport();
 FTXUI_EXPORT(SCREEN) void SetColorSupport(Color color);
 
+// --- Graphics ---------------------------------------------------------------
+//
+// A terminal draws text on a grid of cells. Some terminals are also able to
+// draw pixels, using the sixel protocol. This is what the ftxui::image element
+// uses. Drawing pixels requires knowing two things about the terminal: whether
+// it supports sixel, and how many pixels a cell is made of.
+
+/// @brief The size of one terminal cell, in pixels.
+///
+/// By order of priority, this is:
+/// 1. The value given to SetCellPixelSize().
+/// 2. The `FTXUI_CELL_SIZE` environment variable. Example: `10x20`.
+/// 3. What the operating system knows about the terminal window.
+/// 4. What the terminal replied when it was asked. An ftxui::App asks.
+/// 5. 10x20, the cell size of the VT340, the original sixel terminal.
+/// @ingroup screen
+FTXUI_EXPORT(SCREEN) Dimensions CellPixelSize();
+
+/// @brief Override the size of a terminal cell, in pixels. Use {0, 0} to get
+/// back to the automatic detection.
+/// @ingroup screen
+FTXUI_EXPORT(SCREEN) void SetCellPixelSize(const Dimensions& size);
+
+/// @brief Record the cell size replied by the terminal to the query
+/// `CSI 16 t`. This is called by ftxui::App.
+/// @ingroup screen
+FTXUI_EXPORT(SCREEN) void SetReportedCellPixelSize(const Dimensions& size);
+
+/// @brief Whether images are drawn using the sixel protocol.
+///
+/// By order of priority, this is:
+/// 1. The value given to SetSixelSupport().
+/// 2. The `FTXUI_SIXEL` environment variable: `1` or `0`.
+/// 3. What the terminal replied when it was asked. An ftxui::App asks. For a
+///    program printing a ftxui::Screen without an App, see QueryGraphics().
+/// 4. false.
+///
+/// When sixel isn't supported, images are drawn using unicode half blocks.
+/// @ingroup screen
+FTXUI_EXPORT(SCREEN) bool SixelSupport();
+
+/// @brief Force enabling or disabling the sixel protocol, whatever the
+/// terminal says.
+/// @ingroup screen
+FTXUI_EXPORT(SCREEN) void SetSixelSupport(bool supported);
+
+/// @brief Record whether the terminal advertised supporting sixel, in its
+/// reply to the "Device Attributes" query. This is called by ftxui::App.
+/// @ingroup screen
+FTXUI_EXPORT(SCREEN) void SetDetectedSixelSupport(bool supported);
+
+/// @brief Whether a sixel image may reach the last row of a ftxui::Screen.
+///
+/// After drawing an image, many terminals move the cursor to the line below
+/// it. When the image reaches the last row of the terminal, there is no such
+/// line: the terminal scrolls, and everything displayed is shifted. Some
+/// terminals are able to leave the cursor next to the image instead: this is
+/// the DEC private mode 8452, used when available.
+///
+/// When this is false, the last row of an image reaching the last row of the
+/// screen is left out. A screen might very well be at the bottom of the
+/// terminal.
+///
+/// By order of priority, this is:
+/// 1. The value given to SetSixelLastRowSupport().
+/// 2. The `FTXUI_SIXEL_LAST_ROW` environment variable: `1` or `0`.
+/// 3. Whether the terminal replied knowing about the mode 8452, when it was
+///    asked. An ftxui::App asks. See also QueryGraphics().
+/// 4. false.
+/// @ingroup screen
+FTXUI_EXPORT(SCREEN) bool SixelLastRowSupport();
+
+/// @brief Force allowing, or not, sixel images on the last row of a screen.
+/// @ingroup screen
+FTXUI_EXPORT(SCREEN) void SetSixelLastRowSupport(bool supported);
+
+/// @brief Record whether the terminal knows about the DEC private mode 8452.
+/// This is called by ftxui::App.
+/// @ingroup screen
+FTXUI_EXPORT(SCREEN) void SetDetectedSixelLastRowSupport(bool supported);
+
+/// @brief Ask the terminal whether it supports sixel, and what the size of
+/// its cells is. Then wait for its reply.
+///
+/// This is meant for programs printing a ftxui::Screen and then exiting.
+/// Interactive programs don't need it: ftxui::App does it on its own.
+///
+/// The terminal is reached via /dev/tty, so it works when the standard input
+/// or output are redirected. It does nothing on Windows.
+///
+/// @param timeout_ms How long to wait for the terminal, in milliseconds.
+/// @return SixelSupport().
+/// @ingroup screen
+FTXUI_EXPORT(SCREEN) bool QueryGraphics(int timeout_ms = 200);
+
 /// @brief Quirks is a structure that represents various terminal-specific
 /// behaviors that may require fallbacks.
 /// @ingroup screen
